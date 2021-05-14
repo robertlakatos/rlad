@@ -21,16 +21,31 @@ class Simple:
         self.history = []
         
         self.metrics = [tf.keras.metrics.BinaryAccuracy()]
+        self.metrics_multi_label = False
+        self.metrics_specificity = 0.5
+        self.metrics_sensitivity = 0.5
 
         self.activation = "sigmoid"
-        self.loss = "binary_crossentropy"
+        self.loss = tf.keras.losses.BinaryCrossentropy()
         self.monitor = "val_binary_accuracy"
         if self.output_size > 1:
             self.output_size = self.output_size + 1
             self.activation = "softmax"
-            self.loss = "sparse_categorical_crossentropy"
-            self.metrics[0] = tf.keras.metrics.SparseCategoricalAccuracy()
-            self.monitor="val_sparse_categorical_accuracy"
+            self.loss = tf.keras.losses.CategoricalCrossentropy()
+            self.metrics[0] = tf.keras.metrics.CategoricalAccuracy()
+            self.metrics_multi_label = True
+            self.monitor="val_categorical_accuracy"
+
+        # print(self.metrics_multi_label)
+        self.metrics.append(tf.keras.metrics.AUC(multi_label=self.metrics_multi_label))
+        self.metrics.append(tf.keras.metrics.Precision())
+        self.metrics.append(tf.keras.metrics.Recall())
+        self.metrics.append(tf.keras.metrics.TruePositives())
+        self.metrics.append(tf.keras.metrics.TrueNegatives())
+        self.metrics.append(tf.keras.metrics.FalsePositives())
+        self.metrics.append(tf.keras.metrics.FalseNegatives())
+        self.metrics.append(tf.keras.metrics.SensitivityAtSpecificity(self.metrics_specificity))
+        self.metrics.append(tf.keras.metrics.SpecificityAtSensitivity(self.metrics_sensitivity))
 
         self.early_stopping = tf.keras.callbacks.EarlyStopping(monitor=self.monitor, 
                                                                patience=self.patience)
@@ -72,11 +87,11 @@ class Simple:
             self._create_model()
             self.summary()
             history = self.model.fit(self.train_X,
-                                    self.train_y,
-                                    epochs=self.epochs,
-                                    callbacks=[self.early_stopping],
-                                    batch_size=self.batch_size,
-                                    validation_data=(self.test_X, self.test_y))
+                                     self.train_y,
+                                     epochs=self.epochs,
+                                     callbacks=[self.early_stopping],
+                                     batch_size=self.batch_size,
+                                     validation_data=(self.test_X, self.test_y))
 
             self.history.append(history)
 

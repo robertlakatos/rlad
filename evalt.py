@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 
+import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from drivers.loaders.imdb import IMDB
@@ -56,14 +57,14 @@ class EvalT:
                 simple = Simple(vocab_size=item["vocabs"][i].get_vocab_size(), 
                                 input_lenght=len(item["encodes"][i]["train"]["X"].values[0]), 
                                 embedding_size=8,
-                                output_size=item["encodes"][i]["train"]["y"].values.max()+1,
+                                output_size=item["db"].get_labels(),
                                 repeate=self.repeate,
                                 name=simple_name)
                 
                 simple.set_data(train_X=np.array([item for item in item["encodes"][i]["train"]["X"].values]), 
-                                train_y=np.array(item["encodes"][i]["train"]["y"].values), 
+                                train_y=np.array([item for item in item["encodes"][i]["train"]["y"].values]), 
                                 test_X=np.array([item for item in item["encodes"][i]["test"]["X"].values]), 
-                                test_y=np.array(item["encodes"][i]["test"]["y"].values))
+                                test_y=np.array([item for item in item["encodes"][i]["test"]["y"].values]))
 
                 history = simple.fit()
                 
@@ -116,17 +117,28 @@ class EvalT:
 
                 if os.path.isfile(file_name_encodes_train) == False or os.path.isfile(file_name_encodes_test) == False:
                     item["encodes"][-1]["train"]["X"] = self._encode(vocab, item["db"].get_train()["text"].values)
-                    item["encodes"][-1]["train"]["y"] = item["db"].get_train()["label"].values
-                    item["encodes"][-1]["train"].to_json(file_name_encodes_train, orient="records", lines=True)
-
                     item["encodes"][-1]["test"]["X"] = self._encode(vocab, item["db"].get_test()["text"].values)
-                    item["encodes"][-1]["test"]["y"] = item["db"].get_test()["label"].values
+                                
+                    if item["db"].get_labels() > 1:
+                        train_y = tf.one_hot(item["db"].get_train()["label"].values, item["db"].get_labels()+1).numpy()
+                        train_y = [list(item) for item in train_y]         
+                        item["encodes"][-1]["train"]["y"] = train_y
+
+                        test_y = tf.one_hot(item["db"].get_test()["label"].values, item["db"].get_labels()+1).numpy()      
+                        test_y = [list(item) for item in test_y]
+                        item["encodes"][-1]["test"]["y"] = test_y
+                    else:
+                        item["encodes"][-1]["train"]["y"] = item["db"].get_train()["label"].values                        
+                        item["encodes"][-1]["test"]["y"] = item["db"].get_test()["label"].values
+                    
+                    item["encodes"][-1]["train"].to_json(file_name_encodes_train, orient="records", lines=True)
                     item["encodes"][-1]["test"].to_json(file_name_encodes_test, orient="records", lines=True)
+
                     print("ENCODED (CREATED AND LOADED):", 
-                        file_name_encodes_train, 
-                        file_name_encodes_test,
-                        vocab.name, 
-                        item["db"].name)
+                          file_name_encodes_train, 
+                          file_name_encodes_test,
+                          vocab.name, 
+                          item["db"].name)
                 else:                        
                     item["encodes"][-1]["train"] = pd.read_json(file_name_encodes_train, orient="records", lines=True)
                     item["encodes"][-1]["test"] = pd.read_json(file_name_encodes_test, orient="records", lines=True)
