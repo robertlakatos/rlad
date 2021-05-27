@@ -74,7 +74,7 @@ class Newsspace200:
         trains = trains.sample(frac=1)
         trains.to_json(root + "/train.json", orient="records", lines=True)
         print("CREATED:", root + "/train.json")
-        tests = trains.sample(frac=1)
+        tests = tests.sample(frac=1)
         tests.to_json(root + "/test.json", orient="records", lines=True)
         print("CREATED:", root + "/test.json")
 
