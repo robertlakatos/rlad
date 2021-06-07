@@ -1,8 +1,10 @@
 import tensorflow as tf
 
-class Simple:
+from .model import Model
+
+class Simple(Model):
     def __init__(self, input_length, embedding_size=300, hidden_layer_size=64, output_size=1, patience=2, batch_size=50, repeate=10, name="Simple"):
-        super().__init__()
+        #super().__init__()
 
         self.name = name
         self.input_length = input_length
@@ -36,19 +38,38 @@ class Simple:
                                                                patience=self.patience)
             
 
-    def _create_model(self, vocab_size):
+    def _create_embedding_part(self, vocab_size):
+        return tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=self.embedding_size, input_length=self.input_length)
+
+    def _create_network_part(self):
+        model = tf.keras.Sequential() # TODO: name=
+
+        model.add(tf.keras.layers.Flatten())
+        
+        model.add(tf.keras.layers.Dense(units=self.hidden_layer_size))
+        model.add(tf.keras.layers.Dense(units=self.output_size, 
+                                             activation=self.activation))
+
+        return model
+
+    def create_architecture(self, vocab_size):
+        embedding = self._create_embedding_part(vocab_size)
+        network = self._create_network_part()
+
         self.model = tf.keras.Sequential(name=self.name)
 
-        self.model.add(tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=self.embedding_size, input_length=self.input_length))
-        self.model.add(tf.keras.layers.Flatten())
-        
-        self.model.add(tf.keras.layers.Dense(units=self.hidden_layer_size))
-        self.model.add(tf.keras.layers.Dense(units=self.output_size, 
-                                             activation=self.activation))
+        self.model.add(embedding)
+
+        self.model.add(network)
 
         self.model.compile(optimizer='adam',
                            loss=self.loss,
                            metrics=self.metrics)
+
+        return self.model
+
+    def get_architecture(self):
+        return self.model
 
     def summary(self):
         if self.model is not None:
@@ -62,15 +83,15 @@ class Simple:
         self.test_X = test_X
         self.test_y = test_y
 
-    def get_history(self):
-        return self.history
+    #def get_history(self):
+    #    return self.history
 
-    def fit(self, train_X, train_y, val_X, val_y):
-        self._create_model()
+    #def fit(self, train_X, train_y, val_X, val_y):
+    #    self.create_architecture()
+    #
+    #    self.history = self.model.fit(train_X, train_y, epochs=self.epochs, callbacks=self.early_stopping, batch_size=self.batch_size, validation_data=(val_X, val_y))
+    #
+    #    return self.history
 
-        self.history = self.model.fit(train_X, train_y, epochs=self.epochs, callbacks=self.early_stopping, batch_size=self.batch_size, validation_data=(val_X, val_y))
-
-        return self.history
-
-    def __call__(self, inputs):
-        return self.model(inputs)
+    #def __call__(self, inputs):
+    #    return self.model(inputs)

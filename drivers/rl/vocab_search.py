@@ -22,9 +22,10 @@ def get_reward(model,
                y_val,
                preprocess_fn_X,
                monitor,
+               max_epochs,
                lambda_=1,
                patience=3,
-               max_epochs=1000):
+               metrics=["accuracy"]):
     # Accuracy + Validation Accuracy - lambda * (Accuracy - Validation Accuracy)
     # Ötlet:
     #   - minél jobb a pontosság a tanító adathalmazon -> annál nagyobb jutalom
@@ -49,15 +50,27 @@ def get_reward(model,
                         verbose=1,
                         callbacks=early_stopping_callback)
 
-    acc = history.history["accuracy"][-1]
-    val_acc = history.history["val_accuracy"][-1]
+    results = np.zeros((len(metrics)))
 
-    print("ACC: ", acc, "VAL_ACC: ", val_acc)
+    for idx, metric in enumerate(metrics):
+        train_metric = history.history[metric][-1]
+        val_metric = history.history["val_" + metric][-1]
 
-    # TODO: Más metrikák figyelembevétele?
-    return (acc + val_acc) / 2 - lambda_ * math.fabs(
-        acc - val_acc
-    )  # TODO: VOCAB méretének büntetése? kell-e esetleg ha úgyis van val?
+        print(metric, "\t-\t", train_metric)
+        print("val_" + metric, "\t-\t", val_metric)
+
+        # the mean of the two metrics, minus the difference between them
+        results[idx] = (train_metric + val_metric) / 2 - lambda_ * math.fabs(train_metric - val_metric)
+    
+    #acc = history.history["accuracy"][-1]
+    #val_acc = history.history["val_accuracy"][-1]
+
+    #print("ACC: ", acc, "VAL_ACC: ", val_acc)
+    
+    return results.sum()
+    #return (acc + val_acc) / 2 - lambda_ * math.fabs(
+    #    acc - val_acc
+    #)  # TODO: VOCAB méretének büntetése? kell-e esetleg ha úgyis van val?
 
 
 class VocabEnv(gym.Env):
@@ -77,6 +90,9 @@ class VocabEnv(gym.Env):
                  monitor="val_loss",
                  patience=3,
                  max_epochs=1000,
+                 min_vocab_size=100,#TODO
+                 max_vocab_size=10000, #TODO
+                 lambda_=1, # penalising term for the difference between the train metric and the validation metric
                  logger=DummyLogger(log_dir=None)):
         super(VocabEnv, self).__init__()
 
@@ -94,6 +110,9 @@ class VocabEnv(gym.Env):
         self.monitor = monitor
         self.patience = patience
         self.max_epochs = max_epochs
+        self.min_vocab_size = min_vocab_size
+        self.max_vocab_size = max_vocab_size
+        self.lambda_ = lambda_
 
         self.n_actions = len(possible_words) + 1  # +1 for the action meaning stop the search
         self.terminate_idx = self.n_actions - 1
@@ -122,23 +141,23 @@ class VocabEnv(gym.Env):
         return tf.keras.preprocessing.sequence.pad_sequences(
             tokenized, maxlen=self.input_length)
 
-    # TODO: kicserélni
     def _build_model(self):
-        print("Creating model with Vocab size ", len(self.vocab_built))
+        print("Creating model with Vocab size ", self.vocab_length)
         print(self.vocab_built)
         print("-------------------------")
 
-        self.model._create_model(len(self.vocab_built))
+        return self.model.create_architecture(self.vocab_length)
 
-        return self.model.model # TODO: get_model
+        #return self.model.get_architecture()
 
     def _add_to_vocab(self, idx):
         self.state[idx] = 1
 
         word = self.possible_words[idx]
-        token = len(self.vocab_built)
+        token = self.vocab_length #len(self.vocab_built)
 
         self.vocab_built[word] = token
+        self.vocab_length += 1
 
     def step(self, action):
         new_token_index = action
@@ -154,21 +173,27 @@ class VocabEnv(gym.Env):
             done = True
         # If the agent chose to stop the search, we calculate the final reward
         else:
-            # TODO: ha még túl kicsi a vocab mérete, akkor büntessünk (min_vocab_size)
-            if new_token_index == self.terminate_idx:
-                done = True
+            vocab_size = self.vocab_length #len(self.vocab_built) 
 
-                self.model_built = self._build_model()
-                reward = get_reward(model=self.model_built,
-                                    #done=done,
-                                    X_train=self.X_train,
-                                    y_train=self.y_train,
-                                    X_val=self.X_val,
-                                    y_val=self.y_val,
-                                    monitor=self.monitor,
-                                    patience=self.patience,
-                                    max_epochs=self.max_epochs,
-                                    preprocess_fn_X=self._preprocess_input)
+            if new_token_index == self.terminate_idx or vocab_size == self.max_vocab_size:
+                if vocab_size < self.min_vocab_size:
+                    done = True
+                    reward = -1
+                else:
+                    done = True
+
+                    self.model_built = self._build_model()
+                    reward = get_reward(model=self.model_built,
+                                        #done=done,
+                                        X_train=self.X_train,
+                                        y_train=self.y_train,
+                                        X_val=self.X_val,
+                                        y_val=self.y_val,
+                                        monitor=self.monitor,
+                                        patience=self.patience,
+                                        max_epochs=self.max_epochs,
+                                        lambda_=self.lambda_,
+                                        preprocess_fn_X=self._preprocess_input)
             else:
                 done = False
                 reward = 0
@@ -193,6 +218,7 @@ class VocabEnv(gym.Env):
 
         self.state = np.zeros(self.n_actions, dtype=np.uint8)  # Empty vocab
         self.vocab_built = {"[UNK]": 0, "[SEP]": 1, "[CLS]": 2}
+        self.vocab_length = len(self.vocab_built)
 
         VocabEnv.run_idx += 1
         self.total_reward = 0
@@ -220,6 +246,9 @@ class VocabSearch:
                  y_val=None,
                  val_fraction=0.2,
                  input_length=128,
+                 min_vocab_size=100, # TODO
+                 max_vocab_size=10000, # TODO
+                 lambda_=1, # penalising term for the difference between the train metric and the validation metric
                  logger=DummyLogger(None)):
         if X_val is None:
             data_length = len(X_train)
@@ -246,6 +275,9 @@ class VocabSearch:
         self.monitor = monitor
         self.patience = patience
         self.max_epochs = max_epochs
+        self.min_vocab_size = min_vocab_size
+        self.max_vocab_size = max_vocab_size
+        self.lambda_=lambda_
 
     def search(self, n_envs=1, single_thread=False):
         if single_thread:
@@ -275,7 +307,10 @@ class VocabSearch:
                                logger=self.logger,
                                monitor=self.monitor,
                                patience=self.patience,
-                               max_epochs=self.max_epochs
+                               max_epochs=self.max_epochs,
+                               min_vocab_size=self.min_vocab_size,
+                               max_vocab_size=self.max_vocab_size,
+                               lambda_=self.lambda_
                                )
                 env.seed(seed + rank)
                 return env
