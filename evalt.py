@@ -55,18 +55,16 @@ class EvalT:
                 simple_name = model_name + "_" + item["db"].name + "_" + item["vocabs"][i].name
 
                 simple = Simple(vocab_size=item["vocabs"][i].get_vocab_size(), 
-                                input_lenght=len(item["encodes"][i]["train"]["X"].values[0]), 
+                                input_length=len(item["encodes"][i]["train"]["X"].values[0]), 
                                 embedding_size=8,
                                 output_size=item["db"].get_labels(),
                                 repeate=self.repeate,
                                 name=simple_name)
                 
-                simple.set_data(train_X=np.array([item for item in item["encodes"][i]["train"]["X"].values]), 
-                                train_y=np.array([item for item in item["encodes"][i]["train"]["y"].values]), 
-                                test_X=np.array([item for item in item["encodes"][i]["test"]["X"].values]), 
-                                test_y=np.array([item for item in item["encodes"][i]["test"]["y"].values]))
-
-                history = simple.fit()
+                history = simple.fit(train_X=np.array([item for item in item["encodes"][i]["train"]["X"].values]), 
+                                     train_y=np.array([item for item in item["encodes"][i]["train"]["y"].values]), 
+                                     val_X=np.array([item for item in item["encodes"][i]["test"]["X"].values]), 
+                                     val_y=np.array([item for item in item["encodes"][i]["test"]["y"].values]))
                 
                 print(model_name, item["db"].name, item["vocabs"][i].name)
                 
