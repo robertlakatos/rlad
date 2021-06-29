@@ -317,7 +317,7 @@ class VocabSearch:
 
             return _init
 
-        model = PPO(
+        self.model_rl = PPO(
             "MlpPolicy",
             wrapper([make_env(i) for i in range(n_envs)]),
             learning_rate=3e-4,
@@ -328,16 +328,25 @@ class VocabSearch:
             device="cpu",
             policy_kwargs=policy_kwargs)
 
-        model.learn(total_timesteps=100000)
+        self.model_rl.learn(total_timesteps=100000)
 
-        if not os.path.exists("models"):
-            os.makedirs("models")
+        self.save_rl_model()
 
-        model.save(f"models/{int(time.time())}")
+        #if not os.path.exists("models"):
+        #    os.makedirs("models")
 
-        self.model_rl = model
+        #self.model_rl.save(f"models/{int(time.time())}")
+
+        #self.model_rl = model
 
         return self.model_rl
+
+    def save_rl_model(self, name=""):
+        if not os.path.exists("models"):
+            os.makedirs("models")
+        
+        self.model_rl.save(f"models/{name}_{int(time.time())}")
+
 
     def get_vocab(self):
         # TODO:
